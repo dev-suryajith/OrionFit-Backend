@@ -1,0 +1,258 @@
+var jwt = require('jsonwebtoken')
+const axios = require("axios")
+const users = require('../models/userModel');
+const workouts = require('../models/workoutLogModel');
+const waterLogs = require('../models/waterLogModel');
+
+exports.registerUser = async (req, res) => {
+    console.log('---- register controller called ----');
+
+    const { username, phone, email, password } = req.body
+    try {
+        const existingUser = await users.findOne({ email })
+        if (existingUser) {
+            res.status(404).json(`This email has already been registered`)
+        } else {
+            const newUsers = new users({ username, phone, email, password })
+            await newUsers.save()
+            res.status(200).json(newUsers)
+        }
+    } catch (error) {
+        res.status(500).json(`Error registering user : ${error}`)
+    }
+}
+
+exports.loginUser = async (req, res) => {
+    console.log('---- login controller called ----');
+
+    const { email, password } = req.body
+    try {
+        const existingUser = await users.findOne({ email })
+        if (!existingUser) {
+            return res.status(404).json({ message: "User not found" });
+        } else {
+
+            if (existingUser.password == password) {
+                var token = jwt.sign({ email: existingUser.email }, process.env.JWT_SecretKey);
+                res.status(200).json({ existingUser, token })
+            } else {
+                res.status(405).json({ message: `Incorrect Password` })
+
+            }
+        }
+    } catch (error) {
+        res.status(500).json({ message: `Error logging in : ${error}` })
+    }
+}
+
+exports.gatherUserData = async (req, res) => {
+    console.log('---- gatherUserData controller called ----');
+
+    const { gender, age, height, weight, activityLevel, goal, calorieIntake } = req.body
+    const email = req.payload
+    console.log(email);
+
+    try {
+        const existingUser = await users.findOne({ email })
+        if (!existingUser) {
+            return res.status(404).json({ message: "User not found" });
+        } else {
+            const updatedUser = await users.findOneAndUpdate({ email }, { gender, age, height, weight, activityLevel, goal, calorieIntake }, { new: true })
+            res.status(200).json(updatedUser)
+        }
+    } catch (error) {
+        res.status(500).json({ message: `Error logging in : ${error}` })
+    }
+}
+
+exports.logUserWorkout = async (req, res) => {
+    console.log('---- logUserWorkout controller called ----')
+
+    const { name, duration, exercises } = req.body
+    const email = req.payload
+
+    try {
+        if (!name || !duration || !exercises || exercises.length === 0) {
+            return res.status(400).json({ message: "Invalid workout data" })
+        }
+        const existingUser = await users.findOne({ email })
+        if (!existingUser) {
+            return res.status(404).json({ message: "User not found" })
+        }
+        const newWorkout = new workouts({
+            userId: existingUser._id,
+            name,
+            duration,
+            exercises
+        })
+        await newWorkout.save()
+        res.status(201).json(newWorkout)
+
+    } catch (error) {
+        res.status(500).json({ message: `Error logging workout: ${error.message}` })
+    }
+}
+
+exports.fetchWorkoutLog = async (req, res) => {
+    console.log('---- fetchWorkoutLog controller called ----')
+
+    const email = req.payload
+
+    try {
+        const existingUser = await users.findOne({ email })
+        if (!existingUser) {
+            return res.status(404).json({ message: "User not found" })
+        }
+        const workoutLog = await workouts.find({ userId: existingUser._id })
+        console.log(workoutLog);
+
+        res.status(200).json(workoutLog)
+
+    } catch (error) {
+        res.status(500).json({ message: `Error logging workout: ${error.message}` })
+    }
+}
+
+exports.setWaterIntake = async (req, res) => {
+    console.log('---- setWaterIntake controller called ----')
+
+    const { water } = req.body
+    const email = req.payload
+
+    try {
+        if (!water) {
+            return res.status(400).json({ message: "Invalid water data" })
+        }
+        const existingUser = await users.findOne({ email })
+        if (!existingUser) {
+            return res.status(404).json({ message: "User not found" })
+        }
+        const updatedUser = await users.findOneAndUpdate({ email }, { water }, { new: true })
+        res.status(200).json(updatedUser)
+    } catch (error) {
+        res.status(500).json({ message: `Error logging workout: ${error.message}` })
+    }
+}
+
+exports.searchFood = async (req, res) => {
+    try {
+        const { q } = req.body
+        console.log(q);
+
+        const response = await axios.get(
+            `https://api.nal.usda.gov/fdc/v1/foods/search`,
+            {
+                params: {
+                    query: q,
+                    api_key: process.env.USDA_API_KEY
+                }
+            }
+        )
+
+        const foods = response.data.foods.slice(0, 10).map(food => {
+            const nutrients = food.foodNutrients || []
+
+            const getNutrient = (name) =>
+                nutrients.find(n => n.nutrientName === name)?.value || 0
+
+            return {
+                name: food.description,
+                calories: getNutrient("Energy"),
+                protein: getNutrient("Protein"),
+                carbs: getNutrient("Carbohydrate, by difference"),
+                fat: getNutrient("Total lipid (fat)")
+            }
+        })
+
+        res.status(200).json(foods)
+
+    } catch (err) {
+        console.log(err)
+        res.status(500).json("Error fetching food data")
+    }
+}
+
+exports.logWater = async (req, res) => {
+    console.log('---- logWater controller called ----')
+
+    const { amount } = req.body
+    const email = req.payload
+
+    // Keep date as start of the day (important)
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+
+    try {
+        if (!amount) {
+            return res.status(400).json({ message: "Invalid water data" })
+        }
+
+        const existingUser = await users.findOne({ email })
+        if (!existingUser) {
+            return res.status(404).json({ message: "User not found" })
+        }
+
+        const existingWaterLog = await waterLogs.findOne({
+            userId: existingUser._id,
+            date: today
+        })
+
+        if (!existingWaterLog) {
+            // ✅ Create new log with first entry
+            const newWaterLog = new waterLogs({
+                userId: existingUser._id,
+                date: today,
+                logs: [
+                    {
+                        amount,
+                        time: new Date()
+                    }
+                ]
+            })
+
+            await newWaterLog.save()
+            return res.status(201).json(newWaterLog)
+
+        } else {
+            const updatedLog = await waterLogs.findOneAndUpdate(
+                {
+                    userId: existingUser._id,
+                    date: today
+                },
+                {
+                    $push: {
+                        logs: {
+                            amount,
+                            time: new Date()
+                        }
+                    }
+                },
+                { new: true }
+            )
+
+            return res.status(200).json(updatedLog)
+        }
+
+    } catch (error) {
+        res.status(500).json({ message: `Error logging water: ${error.message}` })
+    }
+}
+
+exports.getWaterLog = async (req, res) => {
+    console.log('---- logWater controller called ----')
+    const today = new Date().setHours(0, 0, 0, 0)
+
+    const email = req.payload
+    try {
+        const existingUser = await users.findOne({ email })
+        if (!existingUser) {
+            return res.status(404).json({ message: "User not found" })
+        }
+        const existingWaterLog = await waterLogs.find({ userId: existingUser._id, date: today })
+        if (existingWaterLog) {
+            return res.status(200).json(existingWaterLog)
+        }
+    } catch (error) {
+
+    }
+}
