@@ -3,6 +3,8 @@ const axios = require("axios")
 const users = require('../models/userModel');
 const workouts = require('../models/workoutLogModel');
 const waterLogs = require('../models/waterLogModel');
+const commonFoods = require('../utils/commonFoods');
+const foodLogs = require('../models/foodLogModel');
 
 exports.registerUser = async (req, res) => {
     console.log('---- register controller called ----');
@@ -134,44 +136,6 @@ exports.setWaterIntake = async (req, res) => {
     }
 }
 
-exports.searchFood = async (req, res) => {
-    try {
-        const { q } = req.body
-        console.log(q);
-
-        const response = await axios.get(
-            `https://api.nal.usda.gov/fdc/v1/foods/search`,
-            {
-                params: {
-                    query: q,
-                    api_key: process.env.USDA_API_KEY
-                }
-            }
-        )
-
-        const foods = response.data.foods.slice(0, 10).map(food => {
-            const nutrients = food.foodNutrients || []
-
-            const getNutrient = (name) =>
-                nutrients.find(n => n.nutrientName === name)?.value || 0
-
-            return {
-                name: food.description,
-                calories: getNutrient("Energy"),
-                protein: getNutrient("Protein"),
-                carbs: getNutrient("Carbohydrate, by difference"),
-                fat: getNutrient("Total lipid (fat)")
-            }
-        })
-
-        res.status(200).json(foods)
-
-    } catch (err) {
-        console.log(err)
-        res.status(500).json("Error fetching food data")
-    }
-}
-
 exports.logWater = async (req, res) => {
     console.log('---- logWater controller called ----')
 
@@ -254,5 +218,124 @@ exports.getWaterLog = async (req, res) => {
         }
     } catch (error) {
 
+    }
+}
+
+exports.searchFood = async (req, res) => {
+    try {
+        const { q } = req.body
+
+        const response = await axios.get(
+            `https://api.edamam.com/api/food-database/v2/parser`,
+            {
+                params: {
+                    ingr: q,
+                    app_id: process.env.EDAMAM_APP_ID,
+                    app_key: process.env.EDAMAM_APP_KEY
+                }
+            }
+        )
+
+        const foods = response.data.hints.map(item => {
+            const food = item.food
+            const nutrients = food.nutrients
+
+            return {
+                name: food.label,
+
+                // ✅ Already per 100g usually
+                calories: nutrients.ENERC_KCAL || 0,
+                protein: nutrients.PROCNT || 0,
+                carbs: nutrients.CHOCDF || 0,
+                fat: nutrients.FAT || 0
+            }
+        })
+
+        res.status(200).json(foods.slice(0, 10))
+
+    } catch (err) {
+        console.log(err)
+        res.status(500).json("Error fetching food data")
+    }
+}
+
+exports.logFood = async (req, res) => {
+    try {
+        const { userId, food } = req.body
+
+        if (!userId || !food) {
+            return res.status(400).json("Missing required data")
+        }
+
+        // ✅ sanitize & normalize
+        const cleanFood = {
+            name: food.name || "Unknown Food",
+            quantity: Number(food.quantity) || 1,
+            calories: Number(food.calories) || 0,
+            protein: Number(food.protein) || 0,
+            carbs: Number(food.carbs) || 0,
+            fat: Number(food.fat) || 0
+        }
+
+        const today = new Date().toISOString().split('T')[0]
+
+        let log = await foodLogs.findOne({ userId, date: today })
+
+        if (!log) {
+            log = new foodLogs({
+                userId,
+                date: today,
+                foods: [cleanFood]
+            })
+        } else {
+            log.foods.push(cleanFood)
+        }
+
+        await log.save()
+
+        res.status(200).json({
+            message: "Food logged successfully",
+            foods: log.foods
+        })
+
+    } catch (err) {
+        console.log(err)
+        res.status(500).json("Error saving food log")
+    }
+}
+
+exports.getFoodLog = async (req, res) => {
+    const { userId } = req.params
+    console.log(userId);
+    
+    const today = new Date().toISOString().split('T')[0]
+
+    try {
+        const log = await foodLogs.find({ userId, date: today })
+        console.log(log);
+        
+        return res.status(200).json(log)
+
+    } catch (err) {
+        res.status(500).json("Error fetching logs")
+    }
+}
+// ❌ DELETE FOOD
+exports.deleteFood = async (req, res) => {
+    const { userId, index } = req.body
+    const today = new Date().toISOString().split('T')[0]
+
+    try {
+        const log = await foodLogs.findOne({ userId, date: today })
+
+        if (!log) return res.status(404).json("No log found")
+
+        log.foods.splice(index, 1)
+
+        await log.save()
+        res.status(200).json(log)
+
+    } catch (err) {
+        res.status(500).json("Error deleting food")
     }
 }

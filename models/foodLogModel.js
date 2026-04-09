@@ -1,22 +1,23 @@
+// models/foodLogModel.js
+
 const mongoose = require('mongoose')
+
+const foodSchema = new mongoose.Schema({
+    name: String,
+    quantity: Number,
+    calories: Number,
+    protein: Number,
+    carbs: Number,
+    fat: Number
+})
 
 const foodLogSchema = new mongoose.Schema({
     userId: String,
     date: {
-        type: Date,
-        default: Date.now
+        type: String, // store as YYYY-MM-DD (IMPORTANT)
     },
-    foods: [
-        {
-            name: String,
-            quantity: Number,
-
-            calories: Number,
-            protein: Number,
-            carbs: Number,
-            fat: Number
-        }
-    ]
+    foods: [foodSchema]
 })
+
 const foodLogs = mongoose.model("foodLogs", foodLogSchema)
 module.exports = foodLogs
