@@ -15,7 +15,7 @@ router.get('/getWaterLog', jwtMiddleware, getWaterLog)
 
 router.post('/searchFood', searchFood)
 router.post('/add-food', jwtMiddleware, logFood)
-router.get('/get-food/:userId', jwtMiddleware, getFoodLog)
+router.get('/get-food/:userId',  getFoodLog)
 router.delete('/delete-food', jwtMiddleware, deleteFood)
 
 

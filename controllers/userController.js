@@ -226,7 +226,7 @@ exports.searchFood = async (req, res) => {
     try {
         const { q } = req.body
         console.log(q);
-        
+
 
         const response = await axios.get(
             `https://api.edamam.com/api/food-database/v2/parser`,
@@ -238,6 +238,8 @@ exports.searchFood = async (req, res) => {
                 }
             }
         )
+
+        // console.log(response.data)
 
         const foods = response.data.hints.map(item => {
             const food = item.food
@@ -252,9 +254,10 @@ exports.searchFood = async (req, res) => {
                 carbs: nutrients.CHOCDF || 0,
                 fat: nutrients.FAT || 0
             }
-        })
+        }).slice(0, 10)
+        console.log(foods)
 
-        res.status(200).json(foods.slice(0, 10))
+        res.status(200).json(foods)
 
     } catch (err) {
         console.log(err)
@@ -309,13 +312,13 @@ exports.logFood = async (req, res) => {
 
 exports.getFoodLog = async (req, res) => {
     const { userId } = req.params
-    console.log(userId);
+    console.log({ "userid": userId });
 
     const today = new Date().toISOString().split('T')[0]
 
     try {
         const log = await foodLogs.find({ userId })
-        console.log(log);
+        console.log({ "log": log });
 
         return res.status(200).json(log)
 
