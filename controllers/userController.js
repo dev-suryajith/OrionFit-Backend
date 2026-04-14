@@ -212,7 +212,8 @@ exports.getWaterLog = async (req, res) => {
         if (!existingUser) {
             return res.status(404).json({ message: "User not found" })
         }
-        const existingWaterLog = await waterLogs.find({ userId: existingUser._id, date: today })
+        const existingWaterLog = await waterLogs.find({ userId: existingUser._id })
+        console.log(existingWaterLog)
         if (existingWaterLog) {
             return res.status(200).json(existingWaterLog)
         }
@@ -224,6 +225,8 @@ exports.getWaterLog = async (req, res) => {
 exports.searchFood = async (req, res) => {
     try {
         const { q } = req.body
+        console.log(q);
+        
 
         const response = await axios.get(
             `https://api.edamam.com/api/food-database/v2/parser`,
@@ -307,20 +310,20 @@ exports.logFood = async (req, res) => {
 exports.getFoodLog = async (req, res) => {
     const { userId } = req.params
     console.log(userId);
-    
+
     const today = new Date().toISOString().split('T')[0]
 
     try {
-        const log = await foodLogs.find({ userId, date: today })
+        const log = await foodLogs.find({ userId })
         console.log(log);
-        
+
         return res.status(200).json(log)
 
     } catch (err) {
         res.status(500).json("Error fetching logs")
     }
 }
-// ❌ DELETE FOOD
+
 exports.deleteFood = async (req, res) => {
     const { userId, index } = req.body
     const today = new Date().toISOString().split('T')[0]
@@ -339,3 +342,4 @@ exports.deleteFood = async (req, res) => {
         res.status(500).json("Error deleting food")
     }
 }
+

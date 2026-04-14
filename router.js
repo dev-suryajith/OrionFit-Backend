@@ -19,4 +19,7 @@ router.get('/get-food/:userId', jwtMiddleware, getFoodLog)
 router.delete('/delete-food', jwtMiddleware, deleteFood)
 
 
+
+
+
 module.exports = router
